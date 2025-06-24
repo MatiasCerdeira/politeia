@@ -1,0 +1,47 @@
+.env
+# Entornos virtuales
+venv/
+env/
+
+# Configuración de VSCode
+.vscode/
+
+# Archivos generados por Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos de logs y salida
+*.log
+output_files/
+
+# Archivos temporales de sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de testing
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+
+# Archivos de entorno
+.env
+.env.*
+
+# Archivos de paquetes
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Jupyter notebooks checkpoints (por si los usás)
+.ipynb_checkpoints/
+
+# Caché de pip
+pip-wheel-metadata/
+*.whl
+
+# Otros
+*.sqlite3
+*.db
