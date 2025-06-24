@@ -1,19 +1,14 @@
 from typing import Optional
 import numpy as np
 import hdbscan
-import numpy as np
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
+from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 
 
 class ClusterEngine:
     """
-    Agrupa vectores usando el algoritmo HDBSCAN.
-
-    Attributes:
-        model (Optional[hdbscan.HDBSCAN]): Una vez que se llama a fit, aca queda la instancia entrenada de HDBSCAN.
-        min_cluster_size (int): Tamaño mínimo de un cluster.
-        min_samples (int): Controla la sensibilidad al ruido (por defecto igual a min_cluster_size).
-        kwargs (dict): Otros parámetros de HDBSCAN (metric, cluster_selection_epsilon, etc.).
+    Agrupa vectores usando el algoritmo HDBSCAN y evalúa la calidad del clustering.
     """
 
     def __init__(
@@ -25,12 +20,6 @@ class ClusterEngine:
         cluster_selection_epsilon: float = 0.02,
         **kwargs
     ):
-        """
-        Args:
-            min_cluster_size: tamaño mínimo de un cluster.
-            min_samples: controla sensibilidad al ruido (por defecto igual a min_cluster_size).
-            kwargs: otros parámetros de HDBSCAN (metric, cluster_selection_epsilon, etc.).
-        """
         self.model: Optional[hdbscan.HDBSCAN] = None
 
         self.params = dict(
@@ -44,22 +33,35 @@ class ClusterEngine:
 
     def fit(self, vectors: np.ndarray) -> np.ndarray:
         """
-        Ajusta HDBSCAN sobre los vectores y devuelve etiquetas de cluster:
-        - etiqueta -1 = ruido
-        - 0,1,2,... = clusters
-
-        Args:
-            vectors (np.ndarray):
-                Arreglo de forma (N, dim) con los vectores a clusterizar.
-
-        Returns:
-            np.ndarray:
-                Un array de numpy con las etiquetas de cluster para cada vector.
-                Las etiquetas son enteros donde -1 indica ruido y 0, 1, 2,... indican clusters.
+        Aplica PCA, normaliza y ajusta HDBSCAN.
+        También calcula métricas de evaluación del clustering.
         """
         assert vectors.ndim == 2, "Esperá un array de forma (N, dim)"
 
-        vectors_norm = normalize(vectors, norm="l2", axis=1)
+        # PCA
+        pca = PCA(n_components=3)
+        vectors_pca = pca.fit_transform(vectors)
+        explained_var = np.cumsum(pca.explained_variance_ratio_)
+        print(f"Varianza acumulada por PCA (componentes 1-50): {explained_var[-1]:.4f}")
 
+        # Normalización L2
+        vectors_norm = normalize(vectors_pca, norm="l2", axis=1)
+
+        # HDBSCAN
         self.model = hdbscan.HDBSCAN(**self.params).fit(vectors_norm)
-        return self.model.labels_
+        labels = self.model.labels_
+
+        # Evaluación (solo si hay al menos 2 clusters válidos)
+        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+        if n_clusters > 1:
+            silhouette = silhouette_score(vectors_norm, labels)
+            ch_index = calinski_harabasz_score(vectors_norm, labels)
+            db_index = davies_bouldin_score(vectors_norm, labels)
+
+            print(f"Silhouette Score (más alto, mejor): {silhouette:.4f}")
+            print(f"Calinski-Harabasz Index (más alto, mejor): {ch_index:.2f}")
+            print(f"Davies-Bouldin Index (más bajo, mejor): {db_index:.4f}")
+        else:
+            print("No hay suficientes clusters válidos para calcular métricas.")
+
+        return labels
