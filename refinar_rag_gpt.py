@@ -6,6 +6,25 @@ from tqdm import tqdm
 
 client = OpenAI(api_key=)
 
+# === ETAPA 1: FILTRAR Y GUARDAR LOS TOP 2 CLUSTERS ===
+
+def guardar_top_clusters(path_input_json, path_output_json="top_clusters.json", n=2):
+    with open(path_input_json, encoding="utf-8") as f:
+        clusters = json.load(f)
+
+    # Filtrar fuera el cluster -1
+    clusters_filtrados = [c for c in clusters if c["cluster_id"] != -1]
+
+    # Ordenar por cantidad de chunks
+    top_clusters = sorted(clusters_filtrados, key=lambda c: len(c["articulos_incluidos"]), reverse=True)[:n]
+
+    with open(path_output_json, "w", encoding="utf-8") as f_out:
+        json.dump(top_clusters, f_out, indent=2, ensure_ascii=False)
+
+    print(f"✅ Se guardaron los {n} clusters más grandes (excluyendo cluster -1) en {path_output_json}")
+
+# === ETAPA 2: PROCESAR CLUSTERS DESDE EL NUEVO JSON ===
+
 class ClusterLoader:
     def __init__(self, path_json):
         self.path_json = path_json
@@ -15,19 +34,17 @@ class ClusterLoader:
         with open(self.path_json, encoding="utf-8") as f:
             return json.load(f)
 
-    def obtener_top_clusters(self, n=2):
-        return sorted(self.clusters, key=lambda c: len(c["articulos_incluidos"]), reverse=True)[:n]
-
 
 class GPTArticleSeparator:
-    def __init__(self, model="gpt-4"):
+    def __init__(self, model="gpt-4o-mini"):
         self.model = model
 
     def refinar(self, texto: str, cluster_id: int, articulo_id: str) -> str:
         prompt = (
             f"Estás refinando un artículo del cluster {cluster_id}, ID {articulo_id}.\n"
-            f"El siguiente texto contiene fragmentos posiblemente dispersos que pertenecen a un mismo artículo periodístico. "
-            f"Unificá el contenido en un solo artículo coherente, redactado en español, claro, con estilo periodístico y sin repeticiones:\n\n{texto}"
+            f"Dentro de este cluster se encuentran fragmentos de noticias. Dichos fragmentos pueden pertenecer a la misma noticia, aunque puede darse el caso de que haya fragmentos de noticias diferentes. "
+            f"Quiero que unifiques los fragmentos correspondientes al mismo articulo dentro de los clusters. Esto significa que puede llegar a haber varios grupos de fragmentos, ya que puede haber varios articulos dentro de cada cluster"
+            f"Utilizá los fragmentos de cada articulo y redactá un texto en español, claro, con estilo periodístico y sin repeticiones:\n\n{texto}"
         )
         try:
             response = client.chat.completions.create(
@@ -50,9 +67,7 @@ class RAGPostProcessor:
         self.resultados = []
 
     def ejecutar(self):
-        top_clusters = self.loader.obtener_top_clusters(2)
-
-        for cluster in tqdm(top_clusters, desc="Procesando los 2 clusters más grandes"):
+        for cluster in tqdm(self.loader.clusters, desc="Procesando clusters seleccionados"):
             chunks_por_articulo = defaultdict(list)
             for id_chunk in cluster["articulos_incluidos"]:
                 articulo, _ = id_chunk.split("_p")
@@ -68,7 +83,6 @@ class RAGPostProcessor:
                 })
 
     def _reconstruir_texto(self, ids_chunks, texto_total):
-        # En esta versión se usa todo el texto reconstruido por ahora (mejorable si tenés los chunks originales)
         joined_ids = ', '.join(ids_chunks)
         return f"(Fragmentos utilizados: {joined_ids})\n\n{texto_total}"
 
@@ -79,10 +93,13 @@ class RAGPostProcessor:
                 f.write(r["texto_refinado"] + "\n\n")
         print(f"✅ Archivo exportado: {output_txt}")
 
-
 def run_rag_refinamiento(args=None):
-    loader = ClusterLoader("output_files/noticias_reconstruidas_clasificadas.json")
+    ruta_entrada = "output_files/noticias_reconstruidas_clasificadas.json"
+    ruta_filtrada = "output_files/top_clusters.json"
+    guardar_top_clusters(ruta_entrada, ruta_filtrada, n=2)
+    loader = ClusterLoader(ruta_filtrada)
     separator = GPTArticleSeparator()
     processor = RAGPostProcessor(loader, separator)
     processor.ejecutar()
     processor.exportar()
+
