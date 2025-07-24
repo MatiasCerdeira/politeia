@@ -8,14 +8,17 @@ client = OpenAI(api_key=)
 
 # === ETAPA 1: FILTRAR Y GUARDAR LOS TOP 2 CLUSTERS ===
 
-def guardar_top_clusters(path_input_json, path_output_json="top_clusters.json", n=2):
+def guardar_top_clusters(path_input_json, path_output_json="output_files/top_clusters.json", n=2):
+    # Crear carpeta si no existe
+    Path(path_output_json).parent.mkdir(parents=True, exist_ok=True)
+
     with open(path_input_json, encoding="utf-8") as f:
         clusters = json.load(f)
 
     # Filtrar fuera el cluster -1
     clusters_filtrados = [c for c in clusters if c["cluster_id"] != -1]
 
-    # Ordenar por cantidad de chunks
+    # Ordenar por cantidad de chunks y tomar top n
     top_clusters = sorted(clusters_filtrados, key=lambda c: len(c["articulos_incluidos"]), reverse=True)[:n]
 
     with open(path_output_json, "w", encoding="utf-8") as f_out:
@@ -43,7 +46,7 @@ class GPTArticleSeparator:
         prompt = (
             f"Estás refinando un artículo del cluster {cluster_id}, ID {articulo_id}.\n"
             f"Dentro de este cluster se encuentran fragmentos de noticias. Dichos fragmentos pueden pertenecer a la misma noticia, aunque puede darse el caso de que haya fragmentos de noticias diferentes. "
-            f"Quiero que unifiques los fragmentos correspondientes al mismo articulo dentro de los clusters. Esto significa que puede llegar a haber varios grupos de fragmentos, ya que puede haber varios articulos dentro de cada cluster"
+            f"Quiero que unifiques los fragmentos correspondientes al mismo articulo dentro de los clusters. Esto significa que puede llegar a haber varios grupos de fragmentos dentro de un cluster, ya que puede haber varios articulos dentro de cada cluster"
             f"Utilizá los fragmentos de cada articulo y redactá un texto en español, claro, con estilo periodístico y sin repeticiones:\n\n{texto}"
         )
         try:
